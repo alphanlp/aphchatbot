@@ -3,6 +3,7 @@
   <component name="ProjectModuleManager">
     <modules>
       <module fileurl="file://$PROJECT_DIR$/.idea/aphchatbot.iml" filepath="$PROJECT_DIR$/.idea/aphchatbot.iml" />
+      <module fileurl="file://$PROJECT_DIR$/../tensorflow/.idea/pydnlp.iml" filepath="$PROJECT_DIR$/../tensorflow/.idea/pydnlp.iml" />
     </modules>
   </component>
 </project>
