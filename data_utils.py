@@ -2,6 +2,7 @@
 
 import re
 import numpy as np
+import pickle
 
 
 def load_xhj():
@@ -38,10 +39,11 @@ def load_tolist(path):
     return data_list
 
 
-extra_tokens = ['_GO', 'EOS']
+extra_tokens = ['PAD', '_GO', 'EOS', ]
 
 start_token = extra_tokens.index('_GO')
 end_token = extra_tokens.index('EOS')
+pad_token = extra_tokens.index('PAD')
 
 input_sentence = [
     "天王盖地虎",
@@ -55,23 +57,37 @@ output_sentence = [
     "在想你啊"
 ]
 
-char_to_index = {}
-index_to_char = {}
-vocab_size = 0
+def prepro_xhj():
+    """
+    将小黄鸡的对话，转化成inputs outputs 上下句对应
+    :return:
+    """
+    conv_list = load_xhj()
+    with open("./resources/inputs", mode='w', encoding="utf-8") as input_file:
+        for conv in conv_list:
+            # print("\n".join(conv[0:-1]))
+            input_file.write("\n" + "\n".join(conv[0:-1]))
+
+
 
 def prepare():
-    global char_to_index
-    global index_to_char
-    global vocab_size
     text = "".join(input_sentence + output_sentence)
     char_list = list(set(text))
-    vocab_size = len(char_list) + len(extra_tokens)
     char_to_index = {ch: i + len(extra_tokens) for i, ch in enumerate(char_list)}
-    index_to_char = {idx: ch for idx, ch in char_to_index.items()}
-    return char_to_index, index_to_char, vocab_size
+
+    with open('vocab.pickle', 'wb') as vocab_f:
+        pickle.dump(char_to_index, vocab_f)
 
 
-def train_set():
+def load_vocab():
+    with open('vocab.pickle', 'rb') as vocab_f:
+        char_to_index = pickle.load(vocab_f)
+        index_to_char = {idx: ch for ch, idx in char_to_index.items()}
+        vocab_size = len(char_to_index) + len(extra_tokens)
+    return index_to_char, char_to_index, vocab_size
+
+
+def train_set(char_to_index):
     for input, output in zip(input_sentence, output_sentence):
         form_input = []
         form_output = []
@@ -112,11 +128,13 @@ def prepare_predict_batch(seqs_x, maxlen=None):
     x_lengths = np.array(lengths_x)
     maxlen_x = np.max(x_lengths)
 
-    x = np.ones((batch_size, maxlen_x)).astype('int32') * end_token
+    x = np.zeros((batch_size, maxlen_x)).astype('int32') * end_token
     for idx, s_x in enumerate(seqs_x):
         x[idx, :lengths_x[idx]] = s_x
     return x, x_lengths
 
+
 if __name__ == '__main__':
-    conv_list = load_xhj()
-    print(conv_list)
+    # conv_list = load_xhj()
+    # print(conv_list)
+    prepro_xhj()
