@@ -17,9 +17,9 @@ class attention_seq2seq():
     def __init__(self, vocab_size, mode='train'):
         self.embedding_size = 128
         self.vocab_size = vocab_size
-        self.hidden_size = 128
-        self.num_layers = 1
-        self.learning_rate = 0.01
+        self.hidden_size = 256
+        self.num_layers = 2
+        self.learning_rate = 0.001
         self.mode = mode
 
     def build_model(self):
@@ -155,12 +155,12 @@ class attention_seq2seq():
     def train(self, sess, encoder_inputs, encoder_inputs_length,
               decoder_targets, decoder_inputs_length):
         decoder_inputs = np.delete(decoder_targets, -1, axis=1)
-        decoder_inputs = np.c_[np.zeros(len(decoder_inputs), dtype=np.int16), decoder_inputs]
+        decoder_inputs = np.c_[np.zeros(len(decoder_inputs), dtype=np.int32), decoder_inputs]
         outputs = sess.run([self.train_op, self.loss, self.merged], feed_dict={self.inputs: encoder_inputs,
-                                                                  self.decoder_input: decoder_inputs,
-                                                                  self.targets: decoder_targets,
-                                                                  self.source_sequence_length: encoder_inputs_length,
-                                                                  self.target_sequence_length: decoder_inputs_length})
+                                                                               self.decoder_input: decoder_inputs,
+                                                                               self.targets: decoder_targets,
+                                                                               self.source_sequence_length: encoder_inputs_length,
+                                                                               self.target_sequence_length: decoder_inputs_length})
         return outputs[0], outputs[1], outputs[2]
 
     def merge(self, sess, train_summary, step):
@@ -177,39 +177,45 @@ class attention_seq2seq():
 
 
 def train():
-    checkpoint = "../model/checkpoint/model.ckpt"
+    input_path = "../resources/inputs"
+    output_path = "../resources/outputs"
+    vocab_path = "../vocab.pickle"
 
-    data_utils.prepare()
-    index_to_char, char_to_index, vocab_size = data_utils.load_vocab()
+    checkpoint = "../model/checkpoint/model.ckpt"
+    batch_size = 128
+
+    index_to_char, char_to_index, vocab_size = data_utils.load_vocab(vocab_path)
+    input_sentence, output_sentence = data_utils.format_corpus(char_to_index, input_path, output_path)
+
     epochs = 100
     with tf.Session() as sess:
         model = attention_seq2seq(vocab_size)
         model.build_model()
         sess.run(tf.global_variables_initializer())
+        saver = tf.train.Saver()
 
-        train_summary = tf.summary.FileWriter('../model/summary/', graph=sess.graph)
         for epoch in range(1, epochs + 1):
-            train_set = data_utils.train_set(char_to_index)
+            train_set = data_utils.train_set(input_sentence, output_sentence, batch_size)
             for source_seq, target_seq in train_set:
                 encoder_inputs, encoder_inputs_length, decoder_inputs, decoder_inputs_length = data_utils.prepare_train_batch(
                     source_seq, target_seq)
-                _, loss = model.train(sess=sess,
-                                      encoder_inputs=encoder_inputs,
-                                      encoder_inputs_length=encoder_inputs_length,
-                                      decoder_targets=decoder_inputs,
-                                      decoder_inputs_length=decoder_inputs_length)
+                _, loss, _ = model.train(sess=sess,
+                                         encoder_inputs=encoder_inputs,
+                                         encoder_inputs_length=encoder_inputs_length,
+                                         decoder_targets=decoder_inputs,
+                                         decoder_inputs_length=decoder_inputs_length)
                 print("epoch={}, loss={}".format(epoch, loss))
 
-            model.merge(sess, train_summary, epoch)
+                saver.save(sess, save_path=checkpoint, global_step=epoch)
+                print('Model Trained and Saved')
 
-        saver = tf.train.Saver()
-        saver.save(sess, save_path=checkpoint)
-        print('Model Trained and Saved')
 
 
 def predit():
-    input_sentence = "我爱"
-    index_to_char, char_to_index, vocab_size = data_utils.load_vocab()
+    vocab_path = "../vocab.pickle"
+
+    input_sentence = "不是"
+    index_to_char, char_to_index, vocab_size = data_utils.load_vocab(vocab_path)
     form_input = []
     for ch in input_sentence:
         try:
@@ -218,7 +224,7 @@ def predit():
         except KeyError:
             pass
     encoder_inputs, encoder_inputs_length = data_utils.prepare_predict_batch([form_input])
-    checkpoint = "../model/checkpoint/model.ckpt"
+    checkpoint = "../model/checkpoint/model.ckpt-1"
 
     with tf.Session() as sess:
         model = attention_seq2seq(vocab_size=vocab_size, mode='decode')
@@ -230,7 +236,9 @@ def predit():
                                       encoder_inputs_length=encoder_inputs_length)
         predicted_ids = predicted_ids[0].tolist()
         predicted_ids = predicted_ids[0]
+        print(predicted_ids)
         temp = [index_to_char[i] for i in predicted_ids if i != data_utils.end_token]
+        print(temp)
         print("".join(temp))
 
 

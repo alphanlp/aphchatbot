@@ -57,20 +57,54 @@ output_sentence = [
     "在想你啊"
 ]
 
+
+def clear(sentence):
+    sentence = sentence.strip()
+    sentence = re.sub(re.compile('\s+'), ' ', sentence)
+    sentence = re.sub(re.compile('\s+,\s+'), ',', sentence)
+    sentence = re.sub(re.compile('\s+。\s+'), '。', sentence)
+    return sentence
+
+
 def prepro_xhj():
     """
-    将小黄鸡的对话，转化成inputs outputs 上下句对应
+    将小黄鸡的对话，转化成inputs outputs 上下句对应，并进行预处理
+    预处理规则：
+    1、空格去除，句子中间的多个空格，全部转化成1个空格
+    2、过长句子的对话筛除
     :return:
     """
     conv_list = load_xhj()
+    print("load 100%......")
+    format_conv_list = []
+    for conv in conv_list:
+        index = 0
+        for line in conv:
+            line = clear(line)
+            if len(line) == 0 or len(line) >= 50:
+                break
+            index += 1
+
+        format_conv = conv[0:index]
+        if len(format_conv) > 0:
+            format_conv_list.append(conv[0:index])
+
     with open("./resources/inputs", mode='w', encoding="utf-8") as input_file:
-        for conv in conv_list:
-            # print("\n".join(conv[0:-1]))
+        for conv in format_conv_list:
             input_file.write("\n" + "\n".join(conv[0:-1]))
 
+    with open("./resources/outputs", mode='w', encoding="utf-8") as input_file:
+        for conv in format_conv_list:
+            input_file.write("\n" + "\n".join(conv[1:]))
 
 
-def prepare():
+def prepare(test):
+    if not test:
+        with open("./resources/inputs", "r", encoding="utf-8") as input_file:
+            input_sentence = input_file.readlines()
+        with open("./resources/outputs", "r", encoding="utf-8") as output_file:
+            output_sentence = output_file.readlines()
+
     text = "".join(input_sentence + output_sentence)
     char_list = list(set(text))
     char_to_index = {ch: i + len(extra_tokens) for i, ch in enumerate(char_list)}
@@ -79,25 +113,43 @@ def prepare():
         pickle.dump(char_to_index, vocab_f)
 
 
-def load_vocab():
-    with open('vocab.pickle', 'rb') as vocab_f:
+def load_vocab(vocab_path):
+    with open(vocab_path, 'rb') as vocab_f:
         char_to_index = pickle.load(vocab_f)
         index_to_char = {idx: ch for ch, idx in char_to_index.items()}
         vocab_size = len(char_to_index) + len(extra_tokens)
     return index_to_char, char_to_index, vocab_size
 
 
-def train_set(char_to_index):
-    for input, output in zip(input_sentence, output_sentence):
-        form_input = []
-        form_output = []
-        for ch in input:
-            form_input.append(char_to_index[ch])
-        for ch in output:
-            form_output.append(char_to_index[ch])
-        form_output.append(end_token)
-        yield [form_input], [form_output]
+def format_corpus(char_to_index, input_path, output_path):
+    with open(input_path, "r", encoding="utf-8") as input_file:
+        input_sentence = input_file.readlines()
+    with open(output_path, "r", encoding="utf-8") as output_file:
+        output_sentence = output_file.readlines()
 
+    form_inputs = []
+    form_outputs = []
+    for sentence in input_sentence:
+        form_inputs.append([char_to_index[ch] for ch in sentence])
+
+    for sentence in output_sentence:
+        form_outputs.append([char_to_index[ch] for ch in sentence] + [end_token])
+    return form_inputs, form_outputs
+
+
+def train_set(inputs, outputs, batch_size):
+    size = len(inputs)
+    batch_nums = size // batch_size
+    start = 0
+    end = size
+    for i in range(batch_nums + 1):
+        if start >= end:
+            break
+        if start + batch_size < end:
+            yield inputs[start:start + batch_size], outputs[start:start + batch_size]
+        else:
+            yield inputs[start:end], outputs[start:end]
+        start += batch_size
 
 def prepare_train_batch(seqs_x, seqs_y, maxlen=None):
     # seqs_x, seqs_y: a list of sentences
@@ -137,4 +189,6 @@ def prepare_predict_batch(seqs_x, maxlen=None):
 if __name__ == '__main__':
     # conv_list = load_xhj()
     # print(conv_list)
-    prepro_xhj()
+    # prepro_xhj()
+    prepare(False)
+    # index_to_char, char_to_index, vocab_size = load_vocab()
